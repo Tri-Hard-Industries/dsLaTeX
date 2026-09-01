@@ -54,6 +54,18 @@ def somerandom():
     $\mathcal{B}$ananas and some lengthy text and more and more
     """
 
+
+def hidden():
+    r"""<!--dslatex
+    THIS SHOULD BE INVISIBLE IN PYLANCE
+
+    $$\alpha = 5$$
+    -->"""
+    return 42
+
+
+hidden()
+
 some
 
 broken
