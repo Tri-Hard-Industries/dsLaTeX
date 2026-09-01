@@ -1,9 +1,13 @@
-# Change Log
+# Changelog
 
-All notable changes to the "dslatex" extension will be documented in this file.
+## 0.0.1
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+Initial release.
 
-## [Unreleased]
-
-- Initial release
+- Render LaTeX in raw Python docstrings on hover
+- Support `$...$` inline mathematics
+- Support `$$...$$` display mathematics
+- Process lowercase `r"""..."""` docstrings
+- Add `dslatex.enabled`
+- Add configurable `dslatex.strokeWidth`
+- Add automatic light/dark theme adaptation

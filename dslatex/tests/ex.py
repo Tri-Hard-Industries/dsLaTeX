@@ -45,6 +45,15 @@ def inline2():
     this is some inline with r $\alpha=6$
     """
 
+def somerandom():
+    r"""
+    This is one interesting docstring https://nutritionsource.hsph.harvard.edu/food-features/bananas/
+
+    ** note the linewidth **
+    
+    $\mathcal{B}$ananas and some lengthy text and more and more
+    """
+
 some
 
 broken
@@ -56,3 +65,5 @@ normal
 inline
 
 inline2
+
+somerandom

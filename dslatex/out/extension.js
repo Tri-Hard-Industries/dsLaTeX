@@ -52,7 +52,6 @@ const mj = mathjax_js_1.mathjax.document('', {
 });
 const renderCache = new Map();
 const maxCacheSize = 256;
-const strokeWidth = 18;
 function getLatexColor() {
     switch (vscode.window.activeColorTheme.kind) {
         case vscode.ColorThemeKind.Light:
@@ -64,6 +63,16 @@ function getLatexColor() {
         default:
             return '#dddddd';
     }
+}
+function getStrokeWidth() {
+    return vscode.workspace
+        .getConfiguration('dslatex')
+        .get('strokeWidth', 18);
+}
+function isEnabled() {
+    return vscode.workspace
+        .getConfiguration('dslatex')
+        .get('enabled', true);
 }
 function cleanDocstring(text) {
     const lines = text
@@ -98,9 +107,10 @@ function cleanDocstring(text) {
 }
 function renderLatex(source, display) {
     const color = getLatexColor();
+    const strokeWidth = getStrokeWidth();
     const cacheKey = `${display}:${color}:${strokeWidth}:${source}`;
     const cached = renderCache.get(cacheKey);
-    if (cached) {
+    if (cached !== undefined) {
         return cached;
     }
     const node = mj.convert(source, { display });
@@ -363,6 +373,9 @@ async function getDocstring(document, position) {
 function activate(context) {
     context.subscriptions.push(vscode.languages.registerHoverProvider('python', {
         async provideHover(document, position) {
+            if (!isEnabled()) {
+                return;
+            }
             const docstring = await getDocstring(document, position);
             if (!docstring) {
                 return;
@@ -376,6 +389,12 @@ function activate(context) {
     }));
     context.subscriptions.push(vscode.window.onDidChangeActiveColorTheme(() => {
         renderCache.clear();
+    }));
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('dslatex.enabled') ||
+            event.affectsConfiguration('dslatex.strokeWidth')) {
+            renderCache.clear();
+        }
     }));
 }
 function deactivate() { }

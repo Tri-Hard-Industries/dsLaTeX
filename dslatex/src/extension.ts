@@ -19,7 +19,6 @@ const mj = mathjax.document('', {
 
 const renderCache = new Map<string, string>();
 const maxCacheSize = 256;
-const strokeWidth = 18;
 
 type InlineToken =
 	| { type: 'text'; value: string }
@@ -43,6 +42,18 @@ function getLatexColor(): string {
 		default:
 			return '#dddddd';
 	}
+}
+
+function getStrokeWidth(): number {
+	return vscode.workspace
+		.getConfiguration('dslatex')
+		.get<number>('strokeWidth', 18);
+}
+
+function isEnabled(): boolean {
+	return vscode.workspace
+		.getConfiguration('dslatex')
+		.get<boolean>('enabled', true);
 }
 
 function cleanDocstring(text: string): string {
@@ -97,12 +108,14 @@ function renderLatex(
 	display: boolean
 ): string {
 	const color = getLatexColor();
+	const strokeWidth = getStrokeWidth();
+
 	const cacheKey =
 		`${display}:${color}:${strokeWidth}:${source}`;
 
 	const cached = renderCache.get(cacheKey);
 
-	if (cached) {
+	if (cached !== undefined) {
 		return cached;
 	}
 
@@ -544,6 +557,10 @@ export function activate(
 					document,
 					position
 				) {
+					if (!isEnabled()) {
+						return;
+					}
+
 					const docstring =
 						await getDocstring(
 							document,
@@ -575,6 +592,23 @@ export function activate(
 		vscode.window.onDidChangeActiveColorTheme(
 			() => {
 				renderCache.clear();
+			}
+		)
+	);
+
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration(
+			event => {
+				if (
+					event.affectsConfiguration(
+						'dslatex.enabled'
+					) ||
+					event.affectsConfiguration(
+						'dslatex.strokeWidth'
+					)
+				) {
+					renderCache.clear();
+				}
 			}
 		)
 	);
