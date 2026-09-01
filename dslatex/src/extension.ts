@@ -9,6 +9,8 @@ import { AllPackages } from 'mathjax-full/js/input/tex/AllPackages.js';
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 
+
+
 const tex = new TeX({ packages: AllPackages });
 const output = new SVG({ fontCache: 'none' });
 
@@ -42,6 +44,14 @@ function getLatexColor(): string {
 		default:
 			return '#dddddd';
 	}
+}
+
+function unwrapDsLatexComment(text: string): string {
+	const match = text.match(
+		/^\s*<!--dslatex\s*([\s\S]*?)\s*-->\s*$/
+	);
+
+	return match ? match[1] : text;
 }
 
 function getStrokeWidth(): number {
@@ -492,17 +502,69 @@ function extractDocstring(
 	return match?.[1];
 }
 
+function getSymbolPosition(
+	document: vscode.TextDocument,
+	position: vscode.Position
+): vscode.Position {
+	const line = document.lineAt(position.line).text;
+	const char = line[position.character];
+
+	if (char === '(') {
+		let i = position.character - 1;
+
+		while (i >= 0 && /\s/.test(line[i])) {
+			i--;
+		}
+
+		while (i >= 0 && /[A-Za-z0-9_]/.test(line[i])) {
+			i--;
+		}
+
+		return new vscode.Position(
+			position.line,
+			Math.max(i + 1, 0)
+		);
+	}
+
+	if (char === ')') {
+		let depth = 1;
+		let i = position.character - 1;
+
+		while (i >= 0) {
+			if (line[i] === ')') {
+				depth++;
+			} else if (line[i] === '(') {
+				depth--;
+
+				if (depth === 0) {
+					return getSymbolPosition(
+						document,
+						new vscode.Position(position.line, i)
+					);
+				}
+			}
+
+			i--;
+		}
+	}
+
+	return position;
+}
+
 async function getDocstring(
 	document: vscode.TextDocument,
 	position: vscode.Position
 ): Promise<string | undefined> {
+	const symbolPosition =
+		getSymbolPosition(document, position);
+
 	const definitions =
 		await vscode.commands.executeCommand<
 			(vscode.Location | vscode.LocationLink)[]
 		>(
 			'vscode.executeDefinitionProvider',
 			document.uri,
-			position
+			symbolPosition
 		);
 
 	if (definitions?.length) {
@@ -573,7 +635,7 @@ export function activate(
 
 					const rendered =
 						renderDocstring(
-							docstring
+							unwrapDsLatexComment(docstring)
 						);
 
 					if (!rendered) {

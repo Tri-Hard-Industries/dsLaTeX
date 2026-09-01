@@ -64,6 +64,10 @@ function getLatexColor() {
             return '#dddddd';
     }
 }
+function unwrapDsLatexComment(text) {
+    const match = text.match(/^\s*<!--dslatex\s*([\s\S]*?)\s*-->\s*$/);
+    return match ? match[1] : text;
+}
 function getStrokeWidth() {
     return vscode.workspace
         .getConfiguration('dslatex')
@@ -351,8 +355,40 @@ function extractDocstring(document, position) {
     const match = body.match(/^\s*r"""([\s\S]*?)"""/);
     return match?.[1];
 }
+function getSymbolPosition(document, position) {
+    const line = document.lineAt(position.line).text;
+    const char = line[position.character];
+    if (char === '(') {
+        let i = position.character - 1;
+        while (i >= 0 && /\s/.test(line[i])) {
+            i--;
+        }
+        while (i >= 0 && /[A-Za-z0-9_]/.test(line[i])) {
+            i--;
+        }
+        return new vscode.Position(position.line, Math.max(i + 1, 0));
+    }
+    if (char === ')') {
+        let depth = 1;
+        let i = position.character - 1;
+        while (i >= 0) {
+            if (line[i] === ')') {
+                depth++;
+            }
+            else if (line[i] === '(') {
+                depth--;
+                if (depth === 0) {
+                    return getSymbolPosition(document, new vscode.Position(position.line, i));
+                }
+            }
+            i--;
+        }
+    }
+    return position;
+}
 async function getDocstring(document, position) {
-    const definitions = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', document.uri, position);
+    const symbolPosition = getSymbolPosition(document, position);
+    const definitions = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', document.uri, symbolPosition);
     if (definitions?.length) {
         const definition = definitions[0];
         const uri = definition instanceof vscode.Location
@@ -380,7 +416,7 @@ function activate(context) {
             if (!docstring) {
                 return;
             }
-            const rendered = renderDocstring(docstring);
+            const rendered = renderDocstring(unwrapDsLatexComment(docstring));
             if (!rendered) {
                 return;
             }
