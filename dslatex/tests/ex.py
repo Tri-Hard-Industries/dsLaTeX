@@ -29,6 +29,30 @@ def some():
     pass
 
 
+def normal():
+    """
+    some text, no nothing
+    """
+
+
+def inline():
+    """
+    this is some inline without r $\alpha=6$
+    """
+
+def inline2():
+    r"""
+    this is some inline with r $\alpha=6$
+    """
+
 some
 
+broken
+
 some_method
+
+normal
+
+inline
+
+inline2
