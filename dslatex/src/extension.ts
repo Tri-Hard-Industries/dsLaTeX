@@ -12,7 +12,7 @@ RegisterHTMLHandler(adaptor);
 
 
 const tex = new TeX({ packages: AllPackages });
-const output = new SVG({ fontCache: 'none' });
+const output = new SVG({ fontCache: 'local' });
 
 const mj = mathjax.document('', {
 	InputJax: tex,
@@ -116,7 +116,7 @@ function cleanDocstring(text: string): string {
 function renderLatex(
 	source: string,
 	display: boolean
-): string {
+): string | undefined {
 	const color = getLatexColor();
 	const strokeWidth = getStrokeWidth();
 
@@ -129,31 +129,39 @@ function renderLatex(
 		return cached;
 	}
 
-	const node = mj.convert(source, { display });
-	const html = adaptor.outerHTML(node);
+	try {
+		const node = mj.convert(source, { display });
+		const html = adaptor.outerHTML(node);
 
-	const start = html.indexOf('<svg');
-	const end = html.lastIndexOf('</svg>') + 6;
+		const start = html.indexOf('<svg');
+		const end = html.lastIndexOf('</svg>') + 6;
 
-	const svg = html
-		.slice(start, end)
-		.replaceAll('currentColor', color)
-		.replaceAll(
-			'<path ',
-			`<path stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round" `
-		);
-
-	if (renderCache.size >= maxCacheSize) {
-		const oldest = renderCache.keys().next().value;
-
-		if (oldest !== undefined) {
-			renderCache.delete(oldest);
+		if (start < 0 || end < 6) {
+			return undefined;
 		}
+
+		const svg = html
+			.slice(start, end)
+			.replaceAll('currentColor', color)
+			.replaceAll(
+				'<path ',
+				`<path stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round" `
+			);
+
+		if (renderCache.size >= maxCacheSize) {
+			const oldest = renderCache.keys().next().value;
+
+			if (oldest !== undefined) {
+				renderCache.delete(oldest);
+			}
+		}
+
+		renderCache.set(cacheKey, svg);
+
+		return svg;
+	} catch {
+		return undefined;
 	}
-
-	renderCache.set(cacheKey, svg);
-
-	return svg;
 }
 
 function svgUri(svg: string): string {
@@ -163,6 +171,18 @@ function svgUri(svg: string): string {
 			.replace(/\(/g, '%28')
 			.replace(/\)/g, '%29')
 	);
+}
+
+function markdownImage(svg: string): vscode.MarkdownString {
+	const md = new vscode.MarkdownString();
+	md.appendMarkdown(`![latex](${svgUri(svg)})`);
+	return md;
+}
+
+function markdownText(text: string): vscode.MarkdownString {
+	const md = new vscode.MarkdownString();
+	md.appendMarkdown(text);
+	return md;
 }
 
 function isEscaped(
@@ -353,11 +373,10 @@ function inlineBlockToTex(
 
 function renderDocstring(
 	text: string
-): vscode.MarkdownString | undefined {
+): vscode.MarkdownString[] | undefined {
 	const cleaned = cleanDocstring(text);
 	const blocks = splitDisplayBlocks(cleaned);
-
-	const md = new vscode.MarkdownString();
+	const contents: vscode.MarkdownString[] = [];
 
 	let hasMath = false;
 
@@ -370,11 +389,13 @@ function renderDocstring(
 				true
 			);
 
-			const uri = svgUri(svg);
-
-			md.appendMarkdown(
-				`\n\n![latex](${uri})\n\n`
-			);
+			if (svg) {
+				contents.push(markdownImage(svg));
+			} else {
+				const md = new vscode.MarkdownString();
+				md.appendCodeblock(block.value, 'latex');
+				contents.push(md);
+			}
 
 			continue;
 		}
@@ -396,20 +417,18 @@ function renderDocstring(
 					false
 				);
 
-				const uri = svgUri(svg);
-
-				md.appendMarkdown(
-					`![latex](${uri})\n\n`
-				);
+				if (svg) {
+					contents.push(markdownImage(svg));
+				} else {
+					contents.push(markdownText(paragraph));
+				}
 			} else {
-				md.appendMarkdown(
-					`${paragraph}\n\n`
-				);
+				contents.push(markdownText(paragraph));
 			}
 		}
 	}
 
-	return hasMath ? md : undefined;
+	return hasMath ? contents : undefined;
 }
 
 function extractDocstring(
@@ -642,9 +661,7 @@ export function activate(
 						return;
 					}
 
-					return new vscode.Hover(
-						rendered
-					);
+					return new vscode.Hover(rendered);
 				}
 			}
 		)
