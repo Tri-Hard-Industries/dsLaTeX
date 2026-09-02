@@ -45,7 +45,7 @@ const AllPackages_js_1 = require("mathjax-full/js/input/tex/AllPackages.js");
 const adaptor = (0, liteAdaptor_js_1.liteAdaptor)();
 (0, html_js_1.RegisterHTMLHandler)(adaptor);
 const tex = new tex_js_1.TeX({ packages: AllPackages_js_1.AllPackages });
-const output = new svg_js_1.SVG({ fontCache: 'none' });
+const output = new svg_js_1.SVG({ fontCache: 'local' });
 const mj = mathjax_js_1.mathjax.document('', {
     InputJax: tex,
     OutputJax: output
@@ -117,28 +117,46 @@ function renderLatex(source, display) {
     if (cached !== undefined) {
         return cached;
     }
-    const node = mj.convert(source, { display });
-    const html = adaptor.outerHTML(node);
-    const start = html.indexOf('<svg');
-    const end = html.lastIndexOf('</svg>') + 6;
-    const svg = html
-        .slice(start, end)
-        .replaceAll('currentColor', color)
-        .replaceAll('<path ', `<path stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round" `);
-    if (renderCache.size >= maxCacheSize) {
-        const oldest = renderCache.keys().next().value;
-        if (oldest !== undefined) {
-            renderCache.delete(oldest);
+    try {
+        const node = mj.convert(source, { display });
+        const html = adaptor.outerHTML(node);
+        const start = html.indexOf('<svg');
+        const end = html.lastIndexOf('</svg>') + 6;
+        if (start < 0 || end < 6) {
+            return undefined;
         }
+        const svg = html
+            .slice(start, end)
+            .replaceAll('currentColor', color)
+            .replaceAll('<path ', `<path stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round" `);
+        if (renderCache.size >= maxCacheSize) {
+            const oldest = renderCache.keys().next().value;
+            if (oldest !== undefined) {
+                renderCache.delete(oldest);
+            }
+        }
+        renderCache.set(cacheKey, svg);
+        return svg;
     }
-    renderCache.set(cacheKey, svg);
-    return svg;
+    catch {
+        return undefined;
+    }
 }
 function svgUri(svg) {
     return ('data:image/svg+xml,' +
         encodeURIComponent(svg)
             .replace(/\(/g, '%28')
             .replace(/\)/g, '%29'));
+}
+function markdownImage(svg) {
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(`![latex](${svgUri(svg)})`);
+    return md;
+}
+function markdownText(text) {
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(text);
+    return md;
 }
 function isEscaped(text, index) {
     let count = 0;
@@ -267,14 +285,20 @@ function inlineBlockToTex(text) {
 function renderDocstring(text) {
     const cleaned = cleanDocstring(text);
     const blocks = splitDisplayBlocks(cleaned);
-    const md = new vscode.MarkdownString();
+    const contents = [];
     let hasMath = false;
     for (const block of blocks) {
         if (block.type === 'display') {
             hasMath = true;
             const svg = renderLatex(block.value, true);
-            const uri = svgUri(svg);
-            md.appendMarkdown(`\n\n![latex](${uri})\n\n`);
+            if (svg) {
+                contents.push(markdownImage(svg));
+            }
+            else {
+                const md = new vscode.MarkdownString();
+                md.appendCodeblock(block.value, 'latex');
+                contents.push(md);
+            }
             continue;
         }
         const paragraphs = block.value
@@ -286,15 +310,19 @@ function renderDocstring(text) {
                 hasMath = true;
                 const texParagraph = inlineBlockToTex(paragraph);
                 const svg = renderLatex(texParagraph, false);
-                const uri = svgUri(svg);
-                md.appendMarkdown(`![latex](${uri})\n\n`);
+                if (svg) {
+                    contents.push(markdownImage(svg));
+                }
+                else {
+                    contents.push(markdownText(paragraph));
+                }
             }
             else {
-                md.appendMarkdown(`${paragraph}\n\n`);
+                contents.push(markdownText(paragraph));
             }
         }
     }
-    return hasMath ? md : undefined;
+    return hasMath ? contents : undefined;
 }
 function extractDocstring(document, position) {
     let line = position.line;

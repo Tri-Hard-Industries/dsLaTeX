@@ -8,8 +8,7 @@ Initial release.
 - Support `$...$` inline mathematics
 - Support `$$...$$` display mathematics
 - Process lowercase `r"""..."""` docstrings
-- Process lowercase `r"""..."""` docstrings
-
+- Process lowercase `r"""<!--dslatex...-->"""` docstrings
 - Add `dslatex.enabled`
 - Add configurable `dslatex.strokeWidth`
 - Add automatic light/dark theme adaptation
