@@ -1,25 +1,94 @@
 import * as vscode from 'vscode';
-import { mathjax } from 'mathjax-full/js/mathjax.js';
-import { TeX } from 'mathjax-full/js/input/tex.js';
-import { SVG } from 'mathjax-full/js/output/svg.js';
-import { liteAdaptor } from 'mathjax-full/js/adaptors/liteAdaptor.js';
-import { RegisterHTMLHandler } from 'mathjax-full/js/handlers/html.js';
-import { AllPackages } from 'mathjax-full/js/input/tex/AllPackages.js';
+import '@mathjax/src/js/util/asyncLoad/node.js';
+import { mathjax } from '@mathjax/src/js/mathjax.js';
+import { TeX } from '@mathjax/src/js/input/tex.js';
+import { SVG } from '@mathjax/src/js/output/svg.js';
+import { liteAdaptor } from '@mathjax/src/js/adaptors/liteAdaptor.js';
+import { RegisterHTMLHandler } from '@mathjax/src/js/handlers/html.js';
+import { MathJaxBbmFontExtension } from '@mathjax/mathjax-bbm-font-extension/js/svg.js';
+import { MathJaxBboldxFontExtension } from '@mathjax/mathjax-bboldx-font-extension/js/svg.js';
+import { MathJaxDsfontFontExtension } from '@mathjax/mathjax-dsfont-font-extension/js/svg.js';
+import { MathJaxMhchemFontExtension } from '@mathjax/mathjax-mhchem-font-extension/js/svg.js';
+import '@mathjax/src/js/input/tex/action/ActionConfiguration.js';
+import '@mathjax/src/js/input/tex/ams/AmsConfiguration.js';
+import '@mathjax/src/js/input/tex/amscd/AmsCdConfiguration.js';
+import '@mathjax/src/js/input/tex/bbm/BbmConfiguration.js';
+import '@mathjax/src/js/input/tex/bboldx/BboldxConfiguration.js';
+import '@mathjax/src/js/input/tex/bbox/BboxConfiguration.js';
+import '@mathjax/src/js/input/tex/begingroup/BegingroupConfiguration.js';
+import '@mathjax/src/js/input/tex/boldsymbol/BoldsymbolConfiguration.js';
+import '@mathjax/src/js/input/tex/braket/BraketConfiguration.js';
+import '@mathjax/src/js/input/tex/bussproofs/BussproofsConfiguration.js';
+import '@mathjax/src/js/input/tex/cancel/CancelConfiguration.js';
+import '@mathjax/src/js/input/tex/cases/CasesConfiguration.js';
+import '@mathjax/src/js/input/tex/centernot/CenternotConfiguration.js';
+import '@mathjax/src/js/input/tex/color/ColorConfiguration.js';
+import '@mathjax/src/js/input/tex/colortbl/ColortblConfiguration.js';
+import '@mathjax/src/js/input/tex/colorv2/ColorV2Configuration.js';
+import '@mathjax/src/js/input/tex/configmacros/ConfigMacrosConfiguration.js';
+import '@mathjax/src/js/input/tex/dsfont/DsfontConfiguration.js';
+import '@mathjax/src/js/input/tex/empheq/EmpheqConfiguration.js';
+import '@mathjax/src/js/input/tex/enclose/EncloseConfiguration.js';
+import '@mathjax/src/js/input/tex/extpfeil/ExtpfeilConfiguration.js';
+import '@mathjax/src/js/input/tex/fontsizev3/FontSizeV3Configuration.js';
+import '@mathjax/src/js/input/tex/gensymb/GensymbConfiguration.js';
+import '@mathjax/src/js/input/tex/mathtools/MathtoolsConfiguration.js';
+import '@mathjax/src/js/input/tex/mhchem/MhchemConfiguration.js';
+import '@mathjax/src/js/input/tex/newcommand/NewcommandConfiguration.js';
+import '@mathjax/src/js/input/tex/physics/PhysicsConfiguration.js';
+import '@mathjax/src/js/input/tex/tagformat/TagFormatConfiguration.js';
+import '@mathjax/src/js/input/tex/textcomp/TextcompConfiguration.js';
+import '@mathjax/src/js/input/tex/textmacros/TextMacrosConfiguration.js';
+import '@mathjax/src/js/input/tex/unicode/UnicodeConfiguration.js';
+import '@mathjax/src/js/input/tex/units/UnitsConfiguration.js';
+import '@mathjax/src/js/input/tex/upgreek/UpgreekConfiguration.js';
+import '@mathjax/src/js/input/tex/verb/VerbConfiguration.js';
 
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 
+const texPackages = [
+	'base',
+	'action',
+	'ams',
+	'amscd',
+	'bbm',
+	'bboldx',
+	'bbox',
+	'begingroup',
+	'boldsymbol',
+	'braket',
+	'bussproofs',
+	'cancel',
+	'cases',
+	'centernot',
+	'color',
+	'colortbl',
+	'colorv2',
+	'configmacros',
+	'dsfont',
+	'empheq',
+	'enclose',
+	'extpfeil',
+	'fontsizev3',
+	'gensymb',
+	'mathtools',
+	'mhchem',
+	'newcommand',
+	'physics',
+	'tagformat',
+	'textcomp',
+	'textmacros',
+	'unicode',
+	'units',
+	'upgreek',
+	'verb'
+];
 
-
-const tex = new TeX({ packages: AllPackages });
-const output = new SVG({ fontCache: 'local' });
-
-const mj = mathjax.document('', {
-	InputJax: tex,
-	OutputJax: output
-});
-
-const renderCache = new Map<string, string>();
+const renderCache = new Map<
+	string,
+	Promise<string | undefined>
+>();
 const maxCacheSize = 256;
 
 type InlineToken =
@@ -116,7 +185,7 @@ function cleanDocstring(text: string): string {
 function renderLatex(
 	source: string,
 	display: boolean
-): string | undefined {
+): Promise<string | undefined> {
 	const color = getLatexColor();
 	const strokeWidth = getStrokeWidth();
 
@@ -129,9 +198,57 @@ function renderLatex(
 		return cached;
 	}
 
+	if (renderCache.size >= maxCacheSize) {
+		const oldest = renderCache.keys().next().value;
+
+		if (oldest !== undefined) {
+			renderCache.delete(oldest);
+		}
+	}
+
+	const rendered = renderLatexUncached(
+		source,
+		display,
+		color,
+		strokeWidth
+	);
+
+	renderCache.set(cacheKey, rendered);
+
+	return rendered;
+}
+
+async function renderLatexUncached(
+	source: string,
+	display: boolean,
+	color: string,
+	strokeWidth: number
+): Promise<string | undefined> {
 	try {
-		const node = mj.convert(source, { display });
+		const tex = new TeX({ packages: texPackages });
+		const output = new SVG({
+			fontCache: 'local',
+			linebreaks: { inline: false }
+		});
+
+		output.addExtension(MathJaxBbmFontExtension);
+		output.addExtension(MathJaxBboldxFontExtension);
+		output.addExtension(MathJaxDsfontFontExtension);
+		output.addExtension(MathJaxMhchemFontExtension);
+
+		const mj = mathjax.document('', {
+			InputJax: tex,
+			OutputJax: output
+		});
+
+		const node = await mj.convertPromise(source, {
+			display
+		});
 		const html = adaptor.outerHTML(node);
+
+		if (html.includes('data-mjx-error=')) {
+			return undefined;
+		}
 
 		const start = html.indexOf('<svg');
 		const end = html.lastIndexOf('</svg>') + 6;
@@ -147,16 +264,6 @@ function renderLatex(
 				'<path ',
 				`<path stroke="${color}" stroke-width="${strokeWidth}" stroke-linejoin="round" `
 			);
-
-		if (renderCache.size >= maxCacheSize) {
-			const oldest = renderCache.keys().next().value;
-
-			if (oldest !== undefined) {
-				renderCache.delete(oldest);
-			}
-		}
-
-		renderCache.set(cacheKey, svg);
 
 		return svg;
 	} catch {
@@ -175,8 +282,15 @@ function svgUri(svg: string): string {
 
 function markdownImage(svg: string): vscode.MarkdownString {
 	const md = new vscode.MarkdownString();
-	md.appendMarkdown(`![latex](${svgUri(svg)})`);
+	appendMarkdownImage(md, svg);
 	return md;
+}
+
+function appendMarkdownImage(
+	md: vscode.MarkdownString,
+	svg: string
+): void {
+	md.appendMarkdown(`![latex](${svgUri(svg)})`);
 }
 
 function markdownText(text: string): vscode.MarkdownString {
@@ -332,48 +446,10 @@ function tokenizeInlineMath(
 	return tokens;
 }
 
-function hasInlineMath(text: string): boolean {
-	return tokenizeInlineMath(text).some(
-		token => token.type === 'math'
-	);
-}
-
-function escapeTexText(text: string): string {
-	return text
-		.replaceAll('\\', '\\textbackslash{}')
-		.replaceAll('{', '\\{')
-		.replaceAll('}', '\\}')
-		.replaceAll('%', '\\%')
-		.replaceAll('#', '\\#')
-		.replaceAll('&', '\\&')
-		.replaceAll('_', '\\_')
-		.replaceAll('^', '\\^{}')
-		.replaceAll('~', '\\~{}')
-		.replaceAll('$', '\\$')
-		.replace(/\s+/g, ' ');
-}
-
-function inlineBlockToTex(
-	text: string
-): string {
-	const tokens = tokenizeInlineMath(
-		text.replace(/\n/g, ' ')
-	);
-
-	return tokens
-		.map(token => {
-			if (token.type === 'math') {
-				return token.value;
-			}
-
-			return `\\text{${escapeTexText(token.value)}}`;
-		})
-		.join(' ');
-}
-
-function renderDocstring(
-	text: string
-): vscode.MarkdownString[] | undefined {
+async function renderDocstring(
+	text: string,
+	token?: vscode.CancellationToken
+): Promise<vscode.MarkdownString[] | undefined> {
 	const cleaned = cleanDocstring(text);
 	const blocks = splitDisplayBlocks(cleaned);
 	const contents: vscode.MarkdownString[] = [];
@@ -381,10 +457,14 @@ function renderDocstring(
 	let hasMath = false;
 
 	for (const block of blocks) {
+		if (token?.isCancellationRequested) {
+			return undefined;
+		}
+
 		if (block.type === 'display') {
 			hasMath = true;
 
-			const svg = renderLatex(
+			const svg = await renderLatex(
 				block.value,
 				true
 			);
@@ -406,25 +486,43 @@ function renderDocstring(
 			.filter(Boolean);
 
 		for (const paragraph of paragraphs) {
-			if (hasInlineMath(paragraph)) {
-				hasMath = true;
+			if (token?.isCancellationRequested) {
+				return undefined;
+			}
 
-				const texParagraph =
-					inlineBlockToTex(paragraph);
+			const tokens = tokenizeInlineMath(paragraph);
+			const containsMath = tokens.some(
+				token => token.type === 'math'
+			);
 
-				const svg = renderLatex(
-					texParagraph,
+			if (!containsMath) {
+				contents.push(markdownText(paragraph));
+				continue;
+			}
+
+			hasMath = true;
+
+			const md = new vscode.MarkdownString();
+
+			for (const token of tokens) {
+				if (token.type === 'text') {
+					md.appendMarkdown(token.value);
+					continue;
+				}
+
+				const svg = await renderLatex(
+					token.value,
 					false
 				);
 
 				if (svg) {
-					contents.push(markdownImage(svg));
+					appendMarkdownImage(md, svg);
 				} else {
-					contents.push(markdownText(paragraph));
+					md.appendText(`$${token.value}$`);
 				}
-			} else {
-				contents.push(markdownText(paragraph));
 			}
+
+			contents.push(md);
 		}
 	}
 
@@ -435,21 +533,9 @@ function extractDocstring(
 	document: vscode.TextDocument,
 	position: vscode.Position
 ): string | undefined {
-	let line = position.line;
+	const line = position.line;
 
-	while (line >= 0) {
-		if (
-			/^\s*(?:async\s+)?def\s+/.test(
-				document.lineAt(line).text
-			)
-		) {
-			break;
-		}
-
-		line--;
-	}
-
-	if (line < 0) {
+	if (!isSupportedDefinitionLine(document.lineAt(line).text)) {
 		return undefined;
 	}
 
@@ -521,6 +607,10 @@ function extractDocstring(
 	return match?.[1];
 }
 
+function isSupportedDefinitionLine(text: string): boolean {
+	return /^\s*(?:(?:async\s+)?def|class)\s+/.test(text);
+}
+
 function getSymbolPosition(
 	document: vscode.TextDocument,
 	position: vscode.Position
@@ -587,37 +677,39 @@ async function getDocstring(
 		);
 
 	if (definitions?.length) {
-		const definition = definitions[0];
+		for (const definition of definitions) {
+			const uri =
+				definition instanceof vscode.Location
+					? definition.uri
+					: definition.targetUri;
 
-		const uri =
-			definition instanceof vscode.Location
-				? definition.uri
-				: definition.targetUri;
+			const pos =
+				definition instanceof vscode.Location
+					? definition.range.start
+					: (
+						definition.targetSelectionRange ??
+						definition.targetRange
+					).start;
 
-		const pos =
-			definition instanceof vscode.Location
-				? definition.range.start
-				: (
-					definition.targetSelectionRange ??
-					definition.targetRange
-				).start;
+			const target =
+				await vscode.workspace.openTextDocument(
+					uri
+				);
 
-		const target =
-			await vscode.workspace.openTextDocument(
-				uri
+			const docstring = extractDocstring(
+				target,
+				pos
 			);
 
-		return extractDocstring(
-			target,
-			pos
-		);
+			if (docstring !== undefined) {
+				return docstring;
+			}
+		}
 	}
 
-	if (
-		/^\s*(?:async\s+)?def\s+/.test(
-			document.lineAt(position.line).text
-		)
-	) {
+	if (isSupportedDefinitionLine(
+		document.lineAt(position.line).text
+	)) {
 		return extractDocstring(
 			document,
 			position
@@ -636,7 +728,8 @@ export function activate(
 			{
 				async provideHover(
 					document,
-					position
+					position,
+					token
 				) {
 					if (!isEnabled()) {
 						return;
@@ -653,8 +746,9 @@ export function activate(
 					}
 
 					const rendered =
-						renderDocstring(
-							unwrapDsLatexComment(docstring)
+						await renderDocstring(
+							unwrapDsLatexComment(docstring),
+							token
 						);
 
 					if (!rendered) {
