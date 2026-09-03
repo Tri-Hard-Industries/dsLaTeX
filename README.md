@@ -1,8 +1,22 @@
 # dsLaTeX
 
+Renders `$...$` and `$$...$$` in raw Python function, method, and class docstrings on hover.
 
-dsLaTeX renders LaTeX math inside raw python strings
+```python
+def area(r):
+    r"""Area: $\pi r^2$."""
+```
 
+To hide the raw docstring in the standard hover:
+
+```python
+def area(r):
+    r"""<!--dslatex
+    Area: $\pi r^2$.
+    -->"""
+```
+
+Requires a Python definition provider such as Pylance.
 **Examples**: 
 
 See some link
