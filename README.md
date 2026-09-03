@@ -17,3 +17,12 @@ def area(r):
 ```
 
 Requires a Python definition provider such as Pylance.
+**Examples**: 
+
+See some link
+
+
+**How to install** : 
+
+
+Download the vsix binary [file](https://github.com/Tri-Hard-Industries/dsLaTex/blob/main/dslatex/dslatex-0.0.1.vsix)
